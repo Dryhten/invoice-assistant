@@ -550,9 +550,9 @@ onMounted(() => {
         <div>
           <div class="brand-heading">
             <h1>发票打印助手</h1>
-            <span class="lifetime-stat" aria-label="累计处理发票数量">
+            <span class="lifetime-stat" aria-label="本站运行累积处理发票数量">
               <BarChart3 :size="15" />
-              累计处理 {{ lifetimeProcessedLabel }} 张
+              本站运行累积处理 {{ lifetimeProcessedLabel }} 张
             </span>
           </div>
           <p>已导入 {{ invoices.length }} 张，已确认 {{ recognizedCount }} 张，待处理 {{ pendingCount }} 张</p>

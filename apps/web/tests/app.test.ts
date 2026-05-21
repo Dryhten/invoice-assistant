@@ -162,11 +162,11 @@ describe('App invoice workflow', () => {
     await flushPromises()
 
     expect(mockedRequestInvoiceStats).toHaveBeenCalledTimes(1)
-    expect(wrapper.text()).toContain('累计处理 12 张')
+    expect(wrapper.text()).toContain('本站运行累积处理 12 张')
 
     await uploadFiles(wrapper, [pdfFile()])
 
-    expect(wrapper.text()).toContain('累计处理 13 张')
+    expect(wrapper.text()).toContain('本站运行累积处理 13 张')
   })
 
   it('enlarges and copies the uppercase invoice amount text', async () => {

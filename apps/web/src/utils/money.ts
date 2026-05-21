@@ -85,12 +85,18 @@ export function amountToChineseUppercase(amount: string | number): string {
   const jiao = Math.floor(fraction / 10)
   const fen = fraction % 10
 
-  let result = `${integerToUpper(integer)}元`
+  let result = `${integerToUpper(integer)}圆`
   if (fraction === 0) {
     return `${result}整`
   }
   if (jiao > 0) {
+    if (integer > 0 && integer % 10 === 0) {
+      result += '零'
+    }
     result += `${UPPER_DIGITS[jiao]}角`
+    if (fen === 0) {
+      result += '整'
+    }
   } else if (integer > 0 && fen > 0) {
     result += '零'
   }

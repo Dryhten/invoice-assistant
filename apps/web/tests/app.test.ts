@@ -17,12 +17,13 @@ const mockedRequestInvoiceAmount = vi.mocked(requestInvoiceAmount)
 const mockedBuildMergedInvoicePdf = vi.mocked(buildMergedInvoicePdf)
 const createObjectURL = vi.fn(() => 'blob:merged')
 const revokeObjectURL = vi.fn()
+const writeText = vi.fn()
 
 const recognizedResponse: ExtractAmountResponse = {
   status: 'recognized',
   amount: '85.86',
   amountText: '捌拾伍圆捌角陆分',
-  amountUppercase: '捌拾伍元捌角陆分',
+  amountUppercase: '捌拾伍圆捌角陆分',
   candidates: [],
   rawText: '价税合计（大写）捌拾伍圆捌角陆分',
   source: 'pdf_text',
@@ -38,13 +39,13 @@ const reviewResponse: ExtractAmountResponse = {
     {
       text: '捌拾伍圆捌角陆分',
       amount: '85.86',
-      amount_uppercase: '捌拾伍元捌角陆分',
+      amount_uppercase: '捌拾伍圆捌角陆分',
       score: 20,
     },
     {
       text: '壹佰元整',
       amount: '100.00',
-      amount_uppercase: '壹佰元整',
+      amount_uppercase: '壹佰圆整',
       score: 12,
     },
   ],
@@ -69,6 +70,13 @@ async function uploadFiles(wrapper: ReturnType<typeof mount>, files: File[]) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  writeText.mockResolvedValue(undefined)
+  Object.defineProperty(globalThis.navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText,
+    },
+  })
   Object.defineProperty(globalThis.URL, 'createObjectURL', {
     configurable: true,
     value: createObjectURL,
@@ -82,10 +90,47 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.restoreAllMocks()
 })
 
 describe('App invoice workflow', () => {
+  it('shows a minimum upload progress overlay before revealing the result surface', async () => {
+    vi.useFakeTimers()
+    const file = pdfFile()
+    mockedRequestInvoiceAmount.mockImplementationOnce(
+      (_file, onUploadProgress) =>
+        new Promise((resolve) => {
+          onUploadProgress?.({ loaded: file.size / 4, total: file.size, done: false })
+          setTimeout(() => {
+            onUploadProgress?.({ loaded: file.size, total: file.size, done: true })
+            resolve(recognizedResponse)
+          }, 10)
+        }),
+    )
+    const wrapper = mount(App)
+
+    await uploadFiles(wrapper, [file])
+
+    expect(wrapper.find('.upload-overlay').exists()).toBe(true)
+    expect(wrapper.text()).toContain('正在上传发票')
+    expect(wrapper.text()).toContain('上传进度 25%')
+
+    await vi.advanceTimersByTimeAsync(10)
+    await flushPromises()
+
+    expect(wrapper.find('.upload-overlay').exists()).toBe(true)
+    expect(wrapper.text()).toContain('上传完成')
+
+    await vi.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(340)
+    await flushPromises()
+
+    expect(wrapper.find('.upload-overlay').exists()).toBe(false)
+    expect(wrapper.text()).toContain('已确认')
+    wrapper.unmount()
+  })
+
   it('lets the user confirm a candidate when extraction needs review', async () => {
     mockedRequestInvoiceAmount.mockResolvedValueOnce(reviewResponse)
     const wrapper = mount(App)
@@ -101,7 +146,53 @@ describe('App invoice workflow', () => {
 
     expect(wrapper.text()).toContain('已确认')
     expect(wrapper.text()).toContain('¥85.86')
-    expect(wrapper.text()).toContain('捌拾伍元捌角陆分')
+    expect(wrapper.text()).toContain('捌拾伍圆捌角陆分')
+  })
+
+  it('enlarges and copies the uppercase invoice amount text', async () => {
+    const wrapper = mount(App)
+
+    await uploadFiles(wrapper, [pdfFile()])
+
+    const uppercaseButton = wrapper.find<HTMLButtonElement>('.invoice-uppercase')
+    expect(uppercaseButton.exists()).toBe(true)
+
+    await uppercaseButton.trigger('mouseenter')
+
+    const popover = wrapper.find('.uppercase-popover')
+    expect(popover.exists()).toBe(true)
+    expect(popover.text()).toContain('捌拾伍圆捌角陆分')
+    expect(popover.text()).toContain('点击复制')
+
+    await uppercaseButton.trigger('click')
+    await flushPromises()
+
+    expect(writeText).toHaveBeenCalledWith('捌拾伍圆捌角陆分')
+    expect(wrapper.find('.uppercase-copy-state').text()).toContain('已复制')
+
+    await uppercaseButton.trigger('mouseleave')
+    expect(wrapper.find('.uppercase-popover').exists()).toBe(false)
+  })
+
+  it('copies candidate uppercase text without selecting the candidate row', async () => {
+    mockedRequestInvoiceAmount.mockResolvedValueOnce(reviewResponse)
+    const wrapper = mount(App)
+
+    await uploadFiles(wrapper, [pdfFile()])
+
+    const candidateUppercase = wrapper.find<HTMLElement>('.candidate-uppercase')
+    expect(candidateUppercase.exists()).toBe(true)
+
+    await candidateUppercase.trigger('mouseenter')
+    expect(wrapper.find('.uppercase-popover').text()).toContain('捌拾伍圆捌角陆分')
+    expect(wrapper.find('.uppercase-popover').text()).toContain('点击复制')
+
+    await candidateUppercase.trigger('click')
+    await flushPromises()
+
+    expect(writeText).toHaveBeenCalledWith('捌拾伍圆捌角陆分')
+    expect(wrapper.find('.invoice-card .status').text()).toContain('待确认')
+    expect(wrapper.find('.amount-block').exists()).toBe(false)
   })
 
   it('rejects non-PDF files before calling extraction or preview generation', async () => {
@@ -134,6 +225,6 @@ describe('App invoice workflow', () => {
     await flushPromises()
 
     expect(createObjectURL).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('拖拽或选择发票文件')
+    expect(wrapper.text()).toContain('拖拽或选择 PDF 发票')
   })
 })

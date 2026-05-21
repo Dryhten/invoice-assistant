@@ -38,6 +38,6 @@ def test_extract_amount_returns_summary_from_pdf_text(monkeypatch) -> None:
     payload = response.json()
     assert payload["status"] == "recognized"
     assert payload["amount"] == "85.86"
-    assert payload["amountUppercase"] == "捌拾伍元捌角陆分"
+    assert payload["amountUppercase"] == "捌拾伍圆捌角陆分"
     assert payload["source"] == "pdf_text"
     assert payload["extractor"]["count"] == 1

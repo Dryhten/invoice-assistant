@@ -8,6 +8,8 @@ def test_chinese_amount_to_decimal() -> None:
 
 
 def test_decimal_to_chinese_amount() -> None:
-    assert decimal_to_chinese_amount("85.86") == "捌拾伍元捌角陆分"
-    assert decimal_to_chinese_amount("102.00") == "壹佰零贰元整"
-    assert decimal_to_chinese_amount("1234.56") == "壹仟贰佰叁拾肆元伍角陆分"
+    assert decimal_to_chinese_amount("10.70") == "壹拾圆零柒角整"
+    assert decimal_to_chinese_amount("23.57") == "贰拾叁圆伍角柒分"
+    assert decimal_to_chinese_amount("85.86") == "捌拾伍圆捌角陆分"
+    assert decimal_to_chinese_amount("102.00") == "壹佰零贰圆整"
+    assert decimal_to_chinese_amount("1234.56") == "壹仟贰佰叁拾肆圆伍角陆分"

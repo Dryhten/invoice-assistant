@@ -17,7 +17,7 @@ def test_summarize_unique_uppercase_amount() -> None:
     )
     assert summary["status"] == "recognized"
     assert summary["amount"] == "85.86"
-    assert summary["amountUppercase"] == "捌拾伍元捌角陆分"
+    assert summary["amountUppercase"] == "捌拾伍圆捌角陆分"
 
 
 def test_summarize_conflicting_amounts_needs_review() -> None:

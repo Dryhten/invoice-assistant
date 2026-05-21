@@ -176,11 +176,15 @@ def decimal_to_chinese_amount(amount: Decimal | str | int | float) -> str:
     jiao = fraction // 10
     fen = fraction % 10
 
-    result = _integer_to_upper(integer) + "元"
+    result = _integer_to_upper(integer) + "圆"
     if fraction == 0:
         return result + "整"
     if jiao:
+        if integer > 0 and integer % 10 == 0:
+            result += "零"
         result += UPPER_DIGITS[jiao] + "角"
+        if fen == 0:
+            result += "整"
     elif integer and fen:
         result += "零"
     if fen:

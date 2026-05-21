@@ -8,8 +8,10 @@ describe('money helpers', () => {
   })
 
   it('converts number amounts to Chinese uppercase', () => {
-    expect(amountToChineseUppercase('85.86')).toBe('捌拾伍元捌角陆分')
-    expect(amountToChineseUppercase('102.00')).toBe('壹佰零贰元整')
+    expect(amountToChineseUppercase('10.70')).toBe('壹拾圆零柒角整')
+    expect(amountToChineseUppercase('23.57')).toBe('贰拾叁圆伍角柒分')
+    expect(amountToChineseUppercase('85.86')).toBe('捌拾伍圆捌角陆分')
+    expect(amountToChineseUppercase('102.00')).toBe('壹佰零贰圆整')
   })
 
   it('normalizes manual amount input and rejects invalid values', () => {

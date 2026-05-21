@@ -58,7 +58,9 @@ npm run dev
 | `npm run prepare:server` | 手动同步后端 Python 依赖 |
 | `npm run dev` | 同时启动后端和前端开发服务 |
 | `npm run build` | 类型检查并构建前端 |
-| `npm run preview` | 预览前端构建产物，默认监听 `0.0.0.0`，可在服务器上通过外网访问 |
+| `npm run preview` | 同时启动后端 API 和前端构建产物预览，前端默认监听 `0.0.0.0` |
+| `npm run preview:web` | 只启动前端构建产物预览 |
+| `npm run preview:server` | 只启动后端 API 服务 |
 | `npm run test` | 运行前端 Vitest 和后端 pytest |
 | `npm run type-check` | 运行前端类型检查和后端编译检查 |
 
@@ -69,7 +71,7 @@ npm run build
 npm run preview
 ```
 
-`npm run preview` 会监听所有网卡。部署到服务器后，使用 `http://服务器公网IP:WEB_PORT` 访问；如果未配置 `WEB_PORT`，默认端口是 `5173`。如果仍然无法访问，需要确认服务器防火墙或云安全组已经放行对应端口。
+`npm run preview` 会同时启动后端和前端。前端监听所有网卡，后端只监听服务器本机并通过前端 `/api` 代理访问。部署到服务器后，使用 `http://服务器公网IP:WEB_PORT` 访问；如果未配置 `WEB_PORT`，默认端口是 `5173`。如果仍然无法访问，需要确认服务器防火墙或云安全组已经放行对应端口。
 
 ## 目录结构
 

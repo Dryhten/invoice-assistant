@@ -12,3 +12,4 @@ __pycache__/
 *.log
 coverage/
 .cursor/
+apps/server/data/

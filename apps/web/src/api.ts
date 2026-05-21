@@ -1,4 +1,4 @@
-import type { ExtractAmountResponse } from './types'
+import type { ExtractAmountResponse, InvoiceStatsResponse } from './types'
 
 export interface UploadProgress {
   loaded: number
@@ -60,4 +60,13 @@ export async function requestInvoiceAmount(
 
     request.send(formData)
   })
+}
+
+export async function requestInvoiceStats(): Promise<InvoiceStatsResponse> {
+  const response = await fetch('/api/invoices/stats')
+  const payload = (await response.json().catch(() => null)) as unknown
+  if (!response.ok) {
+    throw new Error(extractErrorMessage(response.status, payload))
+  }
+  return payload as InvoiceStatsResponse
 }

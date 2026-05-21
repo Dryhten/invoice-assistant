@@ -90,6 +90,10 @@ p {
   align-items: center;
 }
 
+.brand > div:last-child {
+  min-width: 0;
+}
+
 .brand-icon {
   display: grid;
   width: 46px;
@@ -102,11 +106,39 @@ p {
   border-radius: 8px;
 }
 
+.brand-heading {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 9px;
+  align-items: center;
+}
+
 h1 {
   color: var(--text);
   font-size: 22px;
   font-weight: 800;
   line-height: 1.15;
+}
+
+.lifetime-stat {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  color: #27567a;
+  background: #edf7fb;
+  border: 1px solid #c7e2ee;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.lifetime-stat svg {
+  flex: 0 0 auto;
 }
 
 .brand p,
@@ -786,22 +818,6 @@ h1 {
   font-size: 18px;
   font-weight: 800;
   line-height: 1.25;
-}
-
-.upload-meter {
-  width: 100%;
-  height: 8px;
-  overflow: hidden;
-  background: #edf2f8;
-  border-radius: 999px;
-}
-
-.upload-meter span {
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, var(--blue), #087f5b);
-  border-radius: inherit;
-  transition: width 120ms linear;
 }
 
 .upload-overlay-enter-active,

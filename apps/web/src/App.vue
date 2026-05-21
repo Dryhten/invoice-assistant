@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   AlertTriangle,
+  BarChart3,
   CheckCircle2,
   Download,
   FileText,
@@ -11,9 +12,9 @@ import {
   Trash2,
   Upload,
 } from 'lucide-vue-next'
-import { requestInvoiceAmount, type UploadProgress } from './api'
+import { requestInvoiceAmount, requestInvoiceStats, type UploadProgress } from './api'
 import { buildMergedInvoicePdf } from './pdf'
-import type { AmountCandidate, InvoiceItem } from './types'
+import type { AmountCandidate, InvoiceItem, InvoiceStatsResponse } from './types'
 import { amountToCents, amountToChineseUppercase, centsToAmount, tryFormatAmount } from './utils/money'
 
 interface TrackedUpload {
@@ -51,6 +52,7 @@ const uploadBatchName = ref('')
 const hoveredUppercaseKey = ref<string | null>(null)
 const copiedUppercaseKey = ref<string | null>(null)
 const copyFailedUppercaseKey = ref<string | null>(null)
+const lifetimeProcessedInvoices = ref<number | null>(null)
 
 const recognizedCount = computed(() => invoices.value.filter((item) => item.amount).length)
 const totalCents = computed(() =>
@@ -67,6 +69,9 @@ const hasInvoices = computed(() => invoices.value.length > 0)
 const reviewCount = computed(() => invoices.value.filter((item) => item.status === 'needs_review').length)
 const failedCount = computed(() => invoices.value.filter((item) => item.status === 'failed').length)
 const pendingCount = computed(() => invoices.value.length - recognizedCount.value)
+const lifetimeProcessedLabel = computed(() =>
+  lifetimeProcessedInvoices.value === null ? '--' : lifetimeProcessedInvoices.value.toLocaleString('zh-CN'),
+)
 const uploadProgressLabel = computed(() => `${Math.round(uploadDisplayProgress.value)}%`)
 const uploadRealProgressLabel = computed(() => `${Math.round(uploadRealProgress.value)}%`)
 const uploadRingStyle = computed(() => ({
@@ -310,6 +315,24 @@ function finishTrackedUpload(itemId: string) {
   refreshUploadProgress()
 }
 
+function applyInvoiceStats(stats: InvoiceStatsResponse | null | undefined) {
+  if (!stats || !Number.isInteger(stats.processedInvoices) || stats.processedInvoices < 0) {
+    return
+  }
+  lifetimeProcessedInvoices.value =
+    lifetimeProcessedInvoices.value === null
+      ? stats.processedInvoices
+      : Math.max(lifetimeProcessedInvoices.value, stats.processedInvoices)
+}
+
+async function loadInvoiceStats() {
+  try {
+    applyInvoiceStats(await requestInvoiceStats())
+  } catch {
+    // Keep the title usable when the backend is still starting; extraction errors are shown separately.
+  }
+}
+
 function openPicker() {
   fileInput.value?.click()
 }
@@ -365,6 +388,7 @@ async function extractInvoice(item: InvoiceItem) {
     item.rawText = result.rawText
     item.source = result.source
     item.elapsedMs = result.elapsedMs
+    applyInvoiceStats(result.stats)
   } catch (error) {
     item.status = 'failed'
     item.error = error instanceof Error ? error.message : 'PDF 文本提取失败'
@@ -510,6 +534,10 @@ onBeforeUnmount(() => {
     URL.revokeObjectURL(pdfUrl.value)
   }
 })
+
+onMounted(() => {
+  void loadInvoiceStats()
+})
 </script>
 
 <template>
@@ -520,7 +548,13 @@ onBeforeUnmount(() => {
           <FileText :size="26" />
         </div>
         <div>
-          <h1>发票打印助手</h1>
+          <div class="brand-heading">
+            <h1>发票打印助手</h1>
+            <span class="lifetime-stat" aria-label="累计处理发票数量">
+              <BarChart3 :size="15" />
+              累计处理 {{ lifetimeProcessedLabel }} 张
+            </span>
+          </div>
           <p>已导入 {{ invoices.length }} 张，已确认 {{ recognizedCount }} 张，待处理 {{ pendingCount }} 张</p>
         </div>
       </div>
@@ -774,9 +808,6 @@ onBeforeUnmount(() => {
           <div class="upload-copy">
             <h2>{{ uploadOverlayTitle }}</h2>
             <p>{{ uploadOverlayDetail }}</p>
-          </div>
-          <div class="upload-meter" aria-hidden="true">
-            <span :style="{ width: uploadProgressLabel }" />
           </div>
         </section>
       </div>

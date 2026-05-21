@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -15,6 +16,7 @@ class Settings(BaseSettings):
     web_port: int = Field(default=5173, alias="WEB_PORT")
     pdf_text_request_timeout_ms: int = Field(default=300000, alias="PDF_TEXT_REQUEST_TIMEOUT_MS")
     max_upload_mb: int = Field(default=50, alias="MAX_UPLOAD_MB")
+    invoice_stats_path: Path = Field(default=Path("data/invoice_stats.json"), alias="INVOICE_STATS_PATH")
 
     @property
     def max_upload_bytes(self) -> int:

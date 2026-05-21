@@ -12,7 +12,9 @@
     "dev:web": "npm --workspace apps/web run dev -- --host 127.0.0.1",
     "dev:server": "cd apps/server && uv run python -m app.dev",
     "build": "npm --workspace apps/web run build",
-    "preview": "npm --workspace apps/web run preview -- --host 0.0.0.0",
+    "preview": "npm run prepare:server && concurrently -k -n server,web \"npm run preview:server\" \"npm run preview:web\"",
+    "preview:web": "npm --workspace apps/web run preview -- --host 0.0.0.0",
+    "preview:server": "cd apps/server && uv run python -m app.serve",
     "test": "npm --workspace apps/web run test && cd apps/server && uv run pytest",
     "type-check": "npm --workspace apps/web run type-check && cd apps/server && uv run python -m compileall app tests"
   },

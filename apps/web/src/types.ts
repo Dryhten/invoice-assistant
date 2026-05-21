@@ -7,6 +7,11 @@ export interface AmountCandidate {
   score: number
 }
 
+export interface InvoiceStatsResponse {
+  processedInvoices: number
+  updatedAt: string | null
+}
+
 export interface ExtractAmountResponse {
   status: 'recognized' | 'needs_review' | 'failed'
   amount: string | null
@@ -16,6 +21,7 @@ export interface ExtractAmountResponse {
   rawText: string
   source: 'pdf_text'
   elapsedMs: number
+  stats?: InvoiceStatsResponse | null
 }
 
 export interface InvoiceItem {

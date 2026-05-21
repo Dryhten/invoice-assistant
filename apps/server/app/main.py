@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
 from .extraction import summarize_amount
 from .pdf_text import extract_pdf_text, save_upload_to_temp, validate_upload
+from .stats import get_invoice_stats, record_processed_invoice
 
 settings = get_settings()
 logger = logging.getLogger("invoice_assistant")
@@ -41,6 +42,12 @@ def health() -> dict[str, Any]:
     }
 
 
+@app.get("/api/invoices/stats")
+def invoice_stats() -> dict[str, Any]:
+    settings = get_settings()
+    return get_invoice_stats(settings)
+
+
 @app.post("/api/invoices/extract-amount")
 async def invoice_extract_amount(file: UploadFile = File(...)) -> dict[str, Any]:
     settings = get_settings()
@@ -66,10 +73,16 @@ async def invoice_extract_amount(file: UploadFile = File(...)) -> dict[str, Any]
             len(summary["candidates"]),
             elapsed_ms,
         )
+        stats = None
+        try:
+            stats = record_processed_invoice(settings)
+        except Exception:
+            logger.exception("Invoice stats update failed")
         return {
             **summary,
             "source": source,
             "elapsedMs": elapsed_ms,
+            "stats": stats,
             "extractor": {"count": len(results), "source": source, "results": results},
         }
     except asyncio.TimeoutError as exc:

@@ -1,12 +1,13 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../src/App.vue'
-import { requestInvoiceAmount } from '../src/api'
+import { requestInvoiceAmount, requestInvoiceStats } from '../src/api'
 import { buildMergedInvoicePdf } from '../src/pdf'
 import type { ExtractAmountResponse } from '../src/types'
 
 vi.mock('../src/api', () => ({
   requestInvoiceAmount: vi.fn(),
+  requestInvoiceStats: vi.fn(),
 }))
 
 vi.mock('../src/pdf', () => ({
@@ -14,6 +15,7 @@ vi.mock('../src/pdf', () => ({
 }))
 
 const mockedRequestInvoiceAmount = vi.mocked(requestInvoiceAmount)
+const mockedRequestInvoiceStats = vi.mocked(requestInvoiceStats)
 const mockedBuildMergedInvoicePdf = vi.mocked(buildMergedInvoicePdf)
 const createObjectURL = vi.fn(() => 'blob:merged')
 const revokeObjectURL = vi.fn()
@@ -87,6 +89,7 @@ beforeEach(() => {
   })
   mockedBuildMergedInvoicePdf.mockResolvedValue(new Blob(['merged pdf'], { type: 'application/pdf' }))
   mockedRequestInvoiceAmount.mockResolvedValue(recognizedResponse)
+  mockedRequestInvoiceStats.mockResolvedValue({ processedInvoices: 12, updatedAt: '2026-05-21T00:00:00Z' })
 })
 
 afterEach(() => {
@@ -147,6 +150,23 @@ describe('App invoice workflow', () => {
     expect(wrapper.text()).toContain('已确认')
     expect(wrapper.text()).toContain('¥85.86')
     expect(wrapper.text()).toContain('捌拾伍圆捌角陆分')
+  })
+
+  it('loads and refreshes the cumulative processed invoice count', async () => {
+    mockedRequestInvoiceAmount.mockResolvedValueOnce({
+      ...recognizedResponse,
+      stats: { processedInvoices: 13, updatedAt: '2026-05-21T00:01:00Z' },
+    })
+    const wrapper = mount(App)
+
+    await flushPromises()
+
+    expect(mockedRequestInvoiceStats).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('累计处理 12 张')
+
+    await uploadFiles(wrapper, [pdfFile()])
+
+    expect(wrapper.text()).toContain('累计处理 13 张')
   })
 
   it('enlarges and copies the uppercase invoice amount text', async () => {

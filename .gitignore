@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.vite/
+.env
+.env.local
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+*.pyo
+*.log
+coverage/
+.cursor/

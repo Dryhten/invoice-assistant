@@ -1,0 +1,23 @@
+{
+  "name": "invoice-assistant",
+  "private": true,
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "prepare": "lefthook install",
+    "postinstall": "npm run prepare:server",
+    "prepare:server": "cd apps/server && uv sync",
+    "dev": "npm run prepare:server && concurrently -k -n server,web \"npm run dev:server\" \"npm run dev:web\"",
+    "dev:web": "npm --workspace apps/web run dev -- --host 127.0.0.1",
+    "dev:server": "cd apps/server && uv run python -m app.dev",
+    "build": "npm --workspace apps/web run build",
+    "preview": "npm --workspace apps/web run preview -- --host 127.0.0.1",
+    "test": "npm --workspace apps/web run test && cd apps/server && uv run pytest",
+    "type-check": "npm --workspace apps/web run type-check && cd apps/server && uv run python -m compileall app tests"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "lefthook": "^1.13.6"
+  }
+}

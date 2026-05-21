@@ -1,0 +1,17 @@
+# pre-commit: fast staged checks only
+# pre-push: full verification before upload (matches CI gates)
+
+pre-commit:
+  parallel: true
+  commands:
+    whitespace:
+      run: git diff --check --staged
+
+pre-push:
+  commands:
+    type-check:
+      run: npm run type-check
+    build:
+      run: npm run build
+    test:
+      run: npm run test

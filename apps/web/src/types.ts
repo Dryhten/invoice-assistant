@@ -19,7 +19,7 @@ export interface ExtractAmountResponse {
   amountUppercase: string | null
   candidates: AmountCandidate[]
   rawText: string
-  source: 'pdf_text'
+  source: 'pdf_text' | 'qr_code'
   elapsedMs: number
   stats?: InvoiceStatsResponse | null
 }

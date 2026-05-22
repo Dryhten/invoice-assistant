@@ -28,6 +28,60 @@ class AmountCandidate:
     score: int
 
 
+def parse_invoice_qr_amount(payload: str) -> AmountCandidate | None:
+    parts = [part.strip() for part in payload.split(",")]
+    if len(parts) < 6:
+        return None
+
+    amount_text = parts[4]
+    if not re.fullmatch(r"\d+(?:\.\d{1,2})?", amount_text):
+        return None
+
+    try:
+        amount = normalize_amount_string(Decimal(amount_text))
+    except Exception:
+        return None
+
+    if amount == "0.00":
+        return None
+
+    return AmountCandidate(
+        text=payload.strip(),
+        amount=amount,
+        amount_uppercase=decimal_to_chinese_amount(amount),
+        score=100,
+    )
+
+
+def find_qr_amount_candidates(payloads: list[str]) -> list[AmountCandidate]:
+    candidates: dict[str, AmountCandidate] = {}
+    for payload in payloads:
+        candidate = parse_invoice_qr_amount(payload)
+        if candidate is None:
+            continue
+        candidates[candidate.text] = candidate
+    return list(candidates.values())
+
+
+def summarize_qr_amount(payloads: list[str]) -> dict[str, Any] | None:
+    candidates = find_qr_amount_candidates(payloads)
+    unique_amounts = {candidate.amount for candidate in candidates}
+
+    if len(unique_amounts) != 1 or not candidates:
+        return None
+
+    best = candidates[0]
+    raw_text = "\n".join(payloads)
+    return {
+        "status": "recognized",
+        "amount": best.amount,
+        "amountText": best.text,
+        "amountUppercase": best.amount_uppercase,
+        "candidates": [candidate.__dict__ for candidate in candidates],
+        "rawText": raw_text,
+    }
+
+
 def collect_texts(data: Any) -> list[str]:
     texts: list[str] = []
 

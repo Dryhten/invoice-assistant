@@ -8,7 +8,7 @@ export interface LoadProgress {
   done: boolean
 }
 
-type PdfJsModule = typeof import('pdfjs-dist')
+type PdfJsModule = typeof import('pdfjs-dist/legacy/build/pdf.mjs')
 type PdfDocumentProxy = Awaited<ReturnType<PdfJsModule['getDocument']>['promise']>
 type PdfPageProxy = Awaited<ReturnType<PdfDocumentProxy['getPage']>>
 
@@ -63,12 +63,13 @@ let processedInvoices = 0
 
 function loadPdfJs() {
   if (!pdfLoader) {
-    pdfLoader = Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.mjs?url')]).then(
-      ([pdfjs, worker]) => {
-        pdfjs.GlobalWorkerOptions.workerSrc = worker.default
-        return pdfjs
-      },
-    )
+    pdfLoader = Promise.all([
+      import('pdfjs-dist/legacy/build/pdf.mjs'),
+      import('pdfjs-dist/legacy/build/pdf.worker.mjs?url'),
+    ]).then(([pdfjs, worker]) => {
+      pdfjs.GlobalWorkerOptions.workerSrc = worker.default
+      return pdfjs
+    })
   }
   return pdfLoader
 }

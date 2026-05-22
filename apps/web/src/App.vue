@@ -17,7 +17,7 @@ import { buildMergedInvoicePdf } from './pdf'
 import type { AmountCandidate, InvoiceItem, InvoiceStatsResponse } from './types'
 import { amountToCents, amountToChineseUppercase, centsToAmount, tryFormatAmount } from './utils/money'
 
-type PdfJsModule = typeof import('pdfjs-dist')
+type PdfJsModule = typeof import('pdfjs-dist/legacy/build/pdf.mjs')
 type PdfDocumentProxy = Awaited<ReturnType<PdfJsModule['getDocument']>['promise']>
 
 interface TrackedUpload {
@@ -316,12 +316,13 @@ function finishTrackedUpload(itemId: string) {
 
 async function loadPdfRenderer() {
   if (!pdfRendererLoader) {
-    pdfRendererLoader = Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.mjs?url')]).then(
-      ([pdfjs, worker]) => {
-        pdfjs.GlobalWorkerOptions.workerSrc = worker.default
-        return pdfjs
-      },
-    )
+    pdfRendererLoader = Promise.all([
+      import('pdfjs-dist/legacy/build/pdf.mjs'),
+      import('pdfjs-dist/legacy/build/pdf.worker.mjs?url'),
+    ]).then(([pdfjs, worker]) => {
+      pdfjs.GlobalWorkerOptions.workerSrc = worker.default
+      return pdfjs
+    })
   }
   return pdfRendererLoader
 }

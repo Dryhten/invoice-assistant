@@ -22,21 +22,8 @@ jobs:
           node-version: "22"
           cache: npm
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
       - name: Install Node dependencies
         run: npm ci
-
-      - name: Install Python dependencies
-        run: cd apps/server && uv sync --frozen
 
       - name: Type check
         run: npm run type-check

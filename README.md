@@ -1,29 +1,29 @@
 # Invoice Assistant
 
-发票打印与金额汇总助手。项目面向电子发票 PDF 的本地整理场景：上传发票后生成合并预览，自动提取发票金额，汇总总金额，并支持手动确认候选金额后下载或打印。
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FDryhten%2Finvoice-assistant)
 
-后端优先本地解码 PDF 页面中的发票二维码，二维码无结果或格式不符合预期时，再读取 PDF 文本层；不调用外部 OCR、AI 或第三方识别服务。
+发票打印与金额汇总助手。项目现在是纯前端静态应用：PDF 只在浏览器本地读取、合并、预览和识别，不上传到本项目后端，也不依赖服务器带宽处理发票文件。
 
 ## 功能
 
 - 批量导入电子发票 PDF。
-- 将多份发票合并为可预览、可下载、可打印的 PDF。
-- 优先从发票二维码解码金额，失败后从 PDF 文本层提取中文大写金额并换算为小写金额。
+- 在浏览器内将多份发票合并为可预览、可下载、可打印的 PDF。
+- 浏览器本地优先解码 PDF 页面中的发票二维码，失败后从 PDF 文本层提取中文大写金额并换算为小写金额。
 - 自动汇总已确认发票金额。
 - 对无法唯一确认的金额提供候选项和手动确认入口。
 
 ## 技术栈
 
-- 前端：Vue 3、Vite、TypeScript、pdf-lib。
-- 后端：FastAPI、pypdfium2、OpenCV、uv。
-- 测试：Vitest、pytest。
+- Vue 3、Vite、TypeScript。
+- pdf-lib：浏览器端合并 PDF。
+- pdfjs-dist：浏览器端渲染 PDF 与读取文本层。
+- jsQR：浏览器端从 canvas 图像数据解码二维码。
+- Vitest：前端测试。
 
 ## 环境要求
 
 - Node.js 18 或更高版本。
 - npm 9 或更高版本。
-- Python 3.10 到 3.12。
-- uv。
 
 ## 快速开始
 
@@ -32,75 +32,75 @@ npm install
 npm run dev
 ```
 
-默认访问地址：
+默认访问地址：`http://127.0.0.1:5173`
 
-- Web：`http://127.0.0.1:5173`
-- API：`http://127.0.0.1:3001`
-
-开发或验证结束后，用 `Ctrl+C` 停止前后端进程。
+开发或验证结束后，用 `Ctrl+C` 停止前端进程。
 
 ## 环境变量
 
-复制 `.env.example` 为 `.env`，按需调整：
+复制 `.env.example` 为 `.env` 后可按需调整：
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `WEB_PORT` | `5173` | 前端开发与预览服务端口 |
-| `PORT` | `3001` | 后端 API 端口 |
-| `PDF_TEXT_REQUEST_TIMEOUT_MS` | `300000` | 单个 PDF 文本提取超时时间，单位毫秒 |
-| `MAX_UPLOAD_MB` | `50` | 单个上传文件大小上限，单位 MB |
 
 ## 常用脚本
 
 | 命令 | 说明 |
 | --- | --- |
-| `npm install` | 安装 Node 依赖，并通过 `postinstall` 同步后端 Python 依赖 |
-| `npm run prepare:server` | 手动同步后端 Python 依赖 |
-| `npm run dev` | 同时启动后端和前端开发服务 |
-| `npm run build` | 类型检查并构建前端 |
-| `npm run preview` | 同时启动后端 API 和前端构建产物预览，前端默认监听 `0.0.0.0` |
-| `npm run preview:web` | 只启动前端构建产物预览 |
-| `npm run preview:server` | 只启动后端 API 服务 |
-| `npm run test` | 运行前端 Vitest 和后端 pytest |
-| `npm run type-check` | 运行前端类型检查和后端编译检查 |
+| `npm install` | 安装前端依赖 |
+| `npm run dev` | 启动 Vite 前端开发服务 |
+| `npm run build` | 类型检查并构建静态前端产物 |
+| `npm run preview` | 预览前端构建产物 |
+| `npm run test` | 运行前端 Vitest |
+| `npm run type-check` | 运行前端类型检查 |
 
-## 服务器预览
+## 静态部署
 
-```bash
+```powershell
 npm run build
-npm run preview
 ```
 
-`npm run preview` 会同时启动后端和前端。前端监听所有网卡，后端只监听服务器本机并通过前端 `/api` 代理访问。部署到服务器后，使用 `http://服务器公网IP:WEB_PORT` 访问；如果未配置 `WEB_PORT`，默认端口是 `5173`。如果仍然无法访问，需要确认服务器防火墙或云安全组已经放行对应端口。
+构建产物位于 `apps/web/dist`，可部署到任意静态站点服务、对象存储或 CDN。运行时不需要 Python、FastAPI 或 API 服务器。
+
+### Vercel CD
+
+项目已包含 `vercel.json` 和 GitHub Actions 生产部署流程。推送到 `main` 分支或手动触发 `Deploy to Vercel` workflow 时，会执行类型检查、测试，并通过 Vercel CLI 部署到生产环境。
+
+需要在 GitHub 仓库的 `Settings -> Secrets and variables -> Actions` 中配置以下 secrets：
+
+| Secret | 说明 |
+| --- | --- |
+| `VERCEL_TOKEN` | Vercel 账号访问令牌 |
+| `VERCEL_ORG_ID` | Vercel 项目所属账号或团队的 ID，也就是 `.vercel/project.json` 里的 `orgId` |
+| `VERCEL_PROJECT_ID` | Vercel 项目 ID |
+
+本地首次关联 Vercel 项目时可运行：
+
+```powershell
+npx vercel link
+```
+
+完成后可从 `.vercel/project.json` 中查看 `orgId` 和 `projectId`，并填入 GitHub secrets。`.vercel` 不需要提交到仓库。
 
 ## 目录结构
 
 ```text
 .
 ├─ apps/
-│  ├─ server/         # FastAPI 后端
-│  └─ web/            # Vue 前端
+│  └─ web/            # Vue 纯前端应用
 ├─ scripts/           # 项目辅助脚本
 ├─ .env.example       # 环境变量示例
 ├─ package.json       # 根项目脚本与 workspace 配置
 └─ README.md
 ```
 
-## 后端接口
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| `GET` | `/api/health` | 健康检查 |
-| `POST` | `/api/invoices/extract-amount` | 上传单个 PDF，提取金额候选 |
-
-开发环境下，Vite 会将 `/api` 请求代理到后端服务。
-
 ## 识别规则与限制
 
-- 当前只支持电子发票 PDF；优先使用二维码金额，二维码不可用时要求 PDF 带可读取文本层。
+- 当前只支持电子发票 PDF。
+- 二维码解码和文本层提取都在浏览器本地执行；不会上传 PDF 到本项目后端。
 - 扫描件、纯图片发票或文本层质量较差的 PDF 无法保证自动识别。
 - 当提取到多个不同金额或没有可靠金额时，系统会进入待确认状态，需要人工选择候选项或手动输入金额。
-- 上传文件仅在后端文本提取过程中写入临时文件，处理完成后会删除。
 
 ## 参考
 

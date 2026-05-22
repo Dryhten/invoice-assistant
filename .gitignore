@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .vite/
+.vercel/
 .env
 .env.local
 .venv/
@@ -13,3 +14,5 @@ __pycache__/
 coverage/
 .cursor/
 apps/server/data/
+
+.vercel

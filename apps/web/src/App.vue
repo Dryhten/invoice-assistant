@@ -12,7 +12,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-vue-next'
-import { requestInvoiceAmount, requestInvoiceStats, type UploadProgress } from './api'
+import { extractInvoiceAmount, getLocalInvoiceStats, type LoadProgress } from './extraction'
 import { buildMergedInvoicePdf } from './pdf'
 import type { AmountCandidate, InvoiceItem, InvoiceStatsResponse } from './types'
 import { amountToCents, amountToChineseUppercase, centsToAmount, tryFormatAmount } from './utils/money'
@@ -57,7 +57,6 @@ const uploadTrackedFiles = new Map<string, TrackedUpload>()
 
 const acceptedTypes = '.pdf'
 const uploadOverlayVisible = ref(false)
-const uploadDisplayProgress = ref(0)
 const uploadRealProgress = ref(0)
 const uploadFileTotal = ref(0)
 const uploadCompletedFiles = ref(0)
@@ -85,21 +84,20 @@ const pendingCount = computed(() => invoices.value.length - recognizedCount.valu
 const lifetimeProcessedLabel = computed(() =>
   lifetimeProcessedInvoices.value === null ? '--' : lifetimeProcessedInvoices.value.toLocaleString('zh-CN'),
 )
-const uploadProgressLabel = computed(() => `${Math.round(uploadDisplayProgress.value)}%`)
 const uploadRealProgressLabel = computed(() => `${Math.round(uploadRealProgress.value)}%`)
 const uploadRingStyle = computed(() => ({
   strokeDasharray: `${UPLOAD_RING_CIRCUMFERENCE}`,
-  strokeDashoffset: `${UPLOAD_RING_CIRCUMFERENCE - (uploadDisplayProgress.value / 100) * UPLOAD_RING_CIRCUMFERENCE}`,
+  strokeDashoffset: `${UPLOAD_RING_CIRCUMFERENCE - (uploadRealProgress.value / 100) * UPLOAD_RING_CIRCUMFERENCE}`,
 }))
-const uploadOverlayTitle = computed(() => (uploadRealProgress.value >= 100 ? '上传完成' : '正在上传发票'))
+const uploadOverlayTitle = computed(() => (uploadRealProgress.value >= 100 ? '处理完成' : '正在处理发票'))
 const uploadOverlayDetail = computed(() => {
   if (uploadRealProgress.value >= 100) {
     return '正在整理预览和识别结果'
   }
   if (uploadFileTotal.value > 1) {
-    return `已上传 ${uploadCompletedFiles.value}/${uploadFileTotal.value} 个文件，上传进度 ${uploadRealProgressLabel.value}`
+    return `已处理 ${uploadCompletedFiles.value}/${uploadFileTotal.value} 个文件，进度 ${uploadRealProgressLabel.value}`
   }
-  return `${uploadBatchName.value || '发票文件'} 上传进度 ${uploadRealProgressLabel.value}`
+  return `${uploadBatchName.value || '发票文件'} 处理进度 ${uploadRealProgressLabel.value}`
 })
 
 function createInvoice(file: File): InvoiceItem {
@@ -176,18 +174,8 @@ function updateUploadDisplayProgress(sessionId: number) {
     return
   }
   const elapsed = nowMs() - uploadOverlayStartedAt
-  const fakeProgress = Math.min(100, (elapsed / MIN_UPLOAD_OVERLAY_MS) * 100)
-  if (uploadRealProgress.value >= 100) {
-    uploadDisplayProgress.value = Math.min(100, fakeProgress)
-  } else {
-    uploadDisplayProgress.value = Math.min(
-      96,
-      Math.max(uploadDisplayProgress.value, uploadRealProgress.value, fakeProgress * 0.92),
-    )
-  }
 
   if (uploadRealProgress.value >= 100 && elapsed >= MIN_UPLOAD_OVERLAY_MS) {
-    uploadDisplayProgress.value = 100
     uploadHideTimer = window.setTimeout(() => {
       if (sessionId !== uploadSessionId) {
         return
@@ -215,7 +203,6 @@ function startUploadOverlay(items: InvoiceItem[]) {
   }
   uploadOverlayStartedAt = nowMs()
   uploadOverlayVisible.value = true
-  uploadDisplayProgress.value = 0
   uploadRealProgress.value = 0
   uploadCompletedFiles.value = 0
   uploadFileTotal.value = items.length
@@ -228,7 +215,6 @@ function stopUploadOverlay() {
   clearUploadTimers()
   uploadTrackedFiles.clear()
   uploadOverlayVisible.value = false
-  uploadDisplayProgress.value = 0
   uploadRealProgress.value = 0
   uploadCompletedFiles.value = 0
   uploadFileTotal.value = 0
@@ -306,7 +292,7 @@ async function copyUppercaseAmount(key: string, value: string | null) {
   }, 1400)
 }
 
-function updateTrackedUpload(itemId: string, progress: UploadProgress) {
+function updateTrackedUpload(itemId: string, progress: LoadProgress) {
   const tracked = uploadTrackedFiles.get(itemId)
   if (!tracked) {
     return
@@ -395,11 +381,7 @@ function applyInvoiceStats(stats: InvoiceStatsResponse | null | undefined) {
 }
 
 async function loadInvoiceStats() {
-  try {
-    applyInvoiceStats(await requestInvoiceStats())
-  } catch {
-    // Keep the title usable when the backend is still starting; extraction errors are shown separately.
-  }
+  applyInvoiceStats(getLocalInvoiceStats())
 }
 
 function openPicker() {
@@ -446,7 +428,7 @@ async function extractInvoice(item: InvoiceItem) {
   item.elapsedMs = null
   item.error = null
   try {
-    const result = await requestInvoiceAmount(item.file, (progress) => updateTrackedUpload(item.id, progress))
+    const result = await extractInvoiceAmount(item.file, (progress) => updateTrackedUpload(item.id, progress))
     item.status = result.status
     item.amount = result.amount
     item.amountUppercase = result.amountUppercase
@@ -711,9 +693,9 @@ onMounted(() => {
         <div>
           <div class="brand-heading">
             <h1>发票打印助手</h1>
-            <span class="lifetime-stat" aria-label="本站运行累积处理发票数量">
+            <span class="lifetime-stat" aria-label="本次已处理发票数量">
               <BarChart3 :size="15" />
-              本站运行累积处理 {{ lifetimeProcessedLabel }} 张
+              本次已处理 {{ lifetimeProcessedLabel }} 张
             </span>
           </div>
           <p>已导入 {{ invoices.length }} 张，已确认 {{ recognizedCount }} 张，待处理 {{ pendingCount }} 张</p>
@@ -978,15 +960,15 @@ onMounted(() => {
 
     <Transition name="upload-overlay">
       <div v-if="uploadOverlayVisible" class="upload-overlay" role="status" aria-live="polite">
-        <section class="upload-dialog" aria-label="发票上传进度">
+        <section class="upload-dialog" aria-label="发票处理进度">
           <div class="upload-ring-wrap">
             <svg class="upload-ring" viewBox="0 0 128 128" aria-hidden="true">
               <circle class="upload-ring-track" cx="64" cy="64" r="54" />
               <circle class="upload-ring-value" cx="64" cy="64" r="54" :style="uploadRingStyle" />
             </svg>
             <div class="upload-ring-label">
-              <strong>{{ uploadProgressLabel }}</strong>
-              <span>{{ uploadRealProgress < 100 ? '上传中' : '完成' }}</span>
+              <strong>{{ uploadRealProgressLabel }}</strong>
+              <span>{{ uploadRealProgress < 100 ? '加载中' : '完成' }}</span>
             </div>
           </div>
           <div class="upload-copy">

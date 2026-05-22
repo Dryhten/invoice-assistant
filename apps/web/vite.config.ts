@@ -1,34 +1,26 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { config as loadDotenv } from 'dotenv'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-loadDotenv({ path: resolve(__dirname, '../../.env') })
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
-const apiPort = process.env.PORT || '3001'
-const webPort = Number(process.env.WEB_PORT || '5173')
-const apiProxy = {
-  target: `http://127.0.0.1:${apiPort}`,
-  changeOrigin: true,
-}
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, projectRoot, '')
+  const webPort = Number(env.WEB_PORT || '5173')
 
-export default defineConfig({
-  plugins: [vue()],
-  server: {
-    port: webPort,
-    strictPort: true,
-    proxy: {
-      '/api': apiProxy,
+  return {
+    plugins: [vue()],
+    server: {
+      port: webPort,
+      strictPort: false,
     },
-  },
-  preview: {
-    port: webPort,
-    strictPort: true,
-    proxy: {
-      '/api': apiProxy,
+    preview: {
+      port: webPort,
+      strictPort: false,
     },
-  },
-  test: {
-    environment: 'jsdom',
-  },
+    test: {
+      environment: 'jsdom',
+    },
+  }
 })

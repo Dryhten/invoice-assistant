@@ -1,1 +1,0 @@
-"""Invoice Assistant API package."""

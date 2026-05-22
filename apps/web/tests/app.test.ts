@@ -1,21 +1,21 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../src/App.vue'
-import { requestInvoiceAmount, requestInvoiceStats } from '../src/api'
+import { extractInvoiceAmount, getLocalInvoiceStats } from '../src/extraction'
 import { buildMergedInvoicePdf } from '../src/pdf'
 import type { ExtractAmountResponse } from '../src/types'
 
-vi.mock('../src/api', () => ({
-  requestInvoiceAmount: vi.fn(),
-  requestInvoiceStats: vi.fn(),
+vi.mock('../src/extraction', () => ({
+  extractInvoiceAmount: vi.fn(),
+  getLocalInvoiceStats: vi.fn(),
 }))
 
 vi.mock('../src/pdf', () => ({
   buildMergedInvoicePdf: vi.fn(),
 }))
 
-const mockedRequestInvoiceAmount = vi.mocked(requestInvoiceAmount)
-const mockedRequestInvoiceStats = vi.mocked(requestInvoiceStats)
+const mockedExtractInvoiceAmount = vi.mocked(extractInvoiceAmount)
+const mockedGetLocalInvoiceStats = vi.mocked(getLocalInvoiceStats)
 const mockedBuildMergedInvoicePdf = vi.mocked(buildMergedInvoicePdf)
 const createObjectURL = vi.fn(() => 'blob:merged')
 const revokeObjectURL = vi.fn()
@@ -88,8 +88,8 @@ beforeEach(() => {
     value: revokeObjectURL,
   })
   mockedBuildMergedInvoicePdf.mockResolvedValue(new Blob(['merged pdf'], { type: 'application/pdf' }))
-  mockedRequestInvoiceAmount.mockResolvedValue(recognizedResponse)
-  mockedRequestInvoiceStats.mockResolvedValue({ processedInvoices: 12, updatedAt: '2026-05-21T00:00:00Z' })
+  mockedExtractInvoiceAmount.mockResolvedValue(recognizedResponse)
+  mockedGetLocalInvoiceStats.mockReturnValue({ processedInvoices: 0, updatedAt: null })
 })
 
 afterEach(() => {
@@ -101,7 +101,7 @@ describe('App invoice workflow', () => {
   it('shows a minimum upload progress overlay before revealing the result surface', async () => {
     vi.useFakeTimers()
     const file = pdfFile()
-    mockedRequestInvoiceAmount.mockImplementationOnce(
+    mockedExtractInvoiceAmount.mockImplementationOnce(
       (_file, onUploadProgress) =>
         new Promise((resolve) => {
           onUploadProgress?.({ loaded: file.size / 4, total: file.size, done: false })
@@ -116,14 +116,14 @@ describe('App invoice workflow', () => {
     await uploadFiles(wrapper, [file])
 
     expect(wrapper.find('.upload-overlay').exists()).toBe(true)
-    expect(wrapper.text()).toContain('正在上传发票')
-    expect(wrapper.text()).toContain('上传进度 25%')
+    expect(wrapper.text()).toContain('正在处理发票')
+    expect(wrapper.text()).toContain('处理进度 25%')
 
     await vi.advanceTimersByTimeAsync(10)
     await flushPromises()
 
     expect(wrapper.find('.upload-overlay').exists()).toBe(true)
-    expect(wrapper.text()).toContain('上传完成')
+    expect(wrapper.text()).toContain('处理完成')
 
     await vi.advanceTimersByTimeAsync(1000)
     await vi.advanceTimersByTimeAsync(340)
@@ -135,12 +135,12 @@ describe('App invoice workflow', () => {
   })
 
   it('lets the user confirm a candidate when extraction needs review', async () => {
-    mockedRequestInvoiceAmount.mockResolvedValueOnce(reviewResponse)
+    mockedExtractInvoiceAmount.mockResolvedValueOnce(reviewResponse)
     const wrapper = mount(App)
 
     await uploadFiles(wrapper, [pdfFile()])
 
-    expect(mockedRequestInvoiceAmount).toHaveBeenCalledTimes(1)
+    expect(mockedExtractInvoiceAmount).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).toContain('待确认')
     const candidateButton = wrapper.findAll('button').find((button) => button.text().includes('¥85.86'))
     expect(candidateButton).toBeTruthy()
@@ -152,8 +152,9 @@ describe('App invoice workflow', () => {
     expect(wrapper.text()).toContain('捌拾伍圆捌角陆分')
   })
 
-  it('loads and refreshes the cumulative processed invoice count', async () => {
-    mockedRequestInvoiceAmount.mockResolvedValueOnce({
+  it('loads and refreshes the local processed invoice count', async () => {
+    mockedGetLocalInvoiceStats.mockReturnValueOnce({ processedInvoices: 12, updatedAt: '2026-05-21T00:00:00Z' })
+    mockedExtractInvoiceAmount.mockResolvedValueOnce({
       ...recognizedResponse,
       stats: { processedInvoices: 13, updatedAt: '2026-05-21T00:01:00Z' },
     })
@@ -161,12 +162,12 @@ describe('App invoice workflow', () => {
 
     await flushPromises()
 
-    expect(mockedRequestInvoiceStats).toHaveBeenCalledTimes(1)
-    expect(wrapper.text()).toContain('本站运行累积处理 12 张')
+    expect(mockedGetLocalInvoiceStats).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('本次已处理 12 张')
 
     await uploadFiles(wrapper, [pdfFile()])
 
-    expect(wrapper.text()).toContain('本站运行累积处理 13 张')
+    expect(wrapper.text()).toContain('本次已处理 13 张')
   })
 
   it('enlarges and copies the uppercase invoice amount text', async () => {
@@ -195,7 +196,7 @@ describe('App invoice workflow', () => {
   })
 
   it('copies candidate uppercase text without selecting the candidate row', async () => {
-    mockedRequestInvoiceAmount.mockResolvedValueOnce(reviewResponse)
+    mockedExtractInvoiceAmount.mockResolvedValueOnce(reviewResponse)
     const wrapper = mount(App)
 
     await uploadFiles(wrapper, [pdfFile()])
@@ -220,7 +221,7 @@ describe('App invoice workflow', () => {
 
     await uploadFiles(wrapper, [new File(['not a pdf'], 'invoice.txt', { type: 'text/plain' })])
 
-    expect(mockedRequestInvoiceAmount).not.toHaveBeenCalled()
+    expect(mockedExtractInvoiceAmount).not.toHaveBeenCalled()
     expect(mockedBuildMergedInvoicePdf).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('失败')
     expect(wrapper.text()).toContain('仅支持 PDF 文件')

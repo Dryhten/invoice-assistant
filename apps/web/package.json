@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@vitejs/plugin-vue": "^6.0.1",
-    "dotenv": "^16.4.7",
+    "jsqr": "^1.4.0",
     "lucide-vue-next": "^0.468.0",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.7.284",

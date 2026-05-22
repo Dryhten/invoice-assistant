@@ -6,20 +6,15 @@
   ],
   "scripts": {
     "prepare": "lefthook install",
-    "postinstall": "npm run prepare:server",
-    "prepare:server": "cd apps/server && uv sync",
-    "dev": "npm run prepare:server && concurrently -k -n server,web \"npm run dev:server\" \"npm run dev:web\"",
+    "dev": "npm run dev:web",
     "dev:web": "npm --workspace apps/web run dev -- --host 127.0.0.1",
-    "dev:server": "cd apps/server && uv run python -m app.dev",
     "build": "npm --workspace apps/web run build",
-    "preview": "npm run prepare:server && concurrently -k -n server,web \"npm run preview:server\" \"npm run preview:web\"",
+    "preview": "npm run preview:web",
     "preview:web": "npm --workspace apps/web run preview -- --host 0.0.0.0",
-    "preview:server": "cd apps/server && uv run python -m app.serve",
-    "test": "npm --workspace apps/web run test && cd apps/server && uv run pytest",
-    "type-check": "npm --workspace apps/web run type-check && cd apps/server && uv run python -m compileall app tests"
+    "test": "npm --workspace apps/web run test",
+    "type-check": "npm --workspace apps/web run type-check"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1",
     "lefthook": "^1.13.6"
   }
 }

@@ -31,6 +31,7 @@
 
 html {
   height: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -52,9 +53,23 @@ button {
   cursor: pointer;
 }
 
+.file-picker-button {
+  cursor: pointer;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
+}
+
+.file-input {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  clip-path: inset(50%);
 }
 
 h1,
@@ -484,6 +499,7 @@ h1 {
 }
 
 .pdf-frame {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -497,7 +513,55 @@ h1 {
   width: 100%;
   height: 100%;
   border: 0;
-  background: white;
+  background: #fff;
+}
+
+.pdf-viewer-container {
+  position: relative;
+  height: 100%;
+  overflow: auto;
+  padding: 14px;
+  scroll-behavior: smooth;
+}
+
+.pdf-canvas-viewer {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+
+.pdf-canvas-page {
+  max-width: 100%;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(5, 10, 20, 0.28);
+}
+
+.pdf-canvas-page canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.pdf-render-mask {
+  position: sticky;
+  bottom: 14px;
+  left: 50%;
+  z-index: 5;
+  display: inline-flex;
+  width: max-content;
+  max-width: calc(100% - 28px);
+  align-items: center;
+  gap: 8px;
+  padding: 9px 13px;
+  color: white;
+  background: rgba(23, 32, 51, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  box-shadow: 0 12px 28px rgba(5, 10, 20, 0.25);
+  font-size: 13px;
+  font-weight: 750;
+  transform: translateX(-50%);
 }
 
 .pdf-state {
@@ -506,6 +570,11 @@ h1 {
   place-items: center;
   color: #e7ebf1;
   font-size: 14px;
+}
+
+.pdf-loading {
+  gap: 10px;
+  align-content: center;
 }
 
 .invoice-card {
@@ -906,46 +975,275 @@ h1 {
 }
 
 @media (max-width: 620px) {
+  body {
+    background: var(--bg);
+  }
+
+  .app-shell {
+    min-height: 100dvh;
+  }
+
   .topbar,
   .workspace {
-    padding-right: 16px;
-    padding-left: 16px;
+    padding-right: 12px;
+    padding-left: 12px;
   }
 
   .topbar {
-    gap: 14px;
+    gap: 12px;
+    padding-top: 12px;
+    padding-bottom: 12px;
   }
 
-  .actions,
+  .brand {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .brand-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  h1 {
+    font-size: 19px;
+  }
+
+  .lifetime-stat {
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.25;
+  }
+
+  .brand p {
+    font-size: 12px;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .manual-row {
     display: grid;
     grid-template-columns: 1fr;
   }
 
   .summary-card {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .summary-item.amount {
+    grid-column: 1 / -1;
+  }
+
+  .summary-item {
+    padding: 9px 11px;
+  }
+
+  .primary-button,
+  .ghost-button {
+    min-height: 44px;
+  }
+
+  .workspace {
+    gap: 14px;
+    padding-top: 14px;
+    padding-bottom: 16px;
+  }
+
+  .preview-pane,
+  .details-pane {
+    min-width: 0;
   }
 
   .dropzone {
-    margin: 16px;
+    margin: 12px;
   }
 
   .dropzone-panel {
-    padding: 28px 20px;
+    width: calc(100% - 24px);
+    padding: 24px 18px;
   }
 
   .invoice-head,
   .pane-toolbar {
     display: grid;
+    gap: 10px;
   }
 
-  .toolbar-actions {
-    margin-top: 10px;
+  .pane-toolbar h2,
+  .details-header h2 {
+    font-size: 18px;
+  }
+
+  .pane-toolbar p,
+  .details-header p {
+    font-size: 12px;
+  }
+
+  .toolbar-actions,
+  .card-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    margin-top: 0;
+  }
+
+  .icon-button,
+  .card-actions button,
+  .manual-row button {
+    min-height: 42px;
+    width: 100%;
   }
 
   .pdf-frame {
-    height: 540px;
-    min-height: 540px;
+    height: clamp(240px, 38vh, 420px);
+    min-height: 0;
     flex: none;
+  }
+
+  .pdf-viewer-container {
+    padding: 8px;
+  }
+
+  .pdf-canvas-viewer {
+    gap: 8px;
+  }
+
+  .pdf-canvas-page {
+    box-shadow: 0 6px 16px rgba(5, 10, 20, 0.24);
+  }
+
+  .details-header {
+    margin-bottom: 8px;
+  }
+
+  .invoice-card {
+    padding: 12px;
+    margin-bottom: 10px;
+    border-left-width: 3px;
+    border-radius: 7px;
+    box-shadow: 0 6px 18px rgba(23, 32, 51, 0.05);
+  }
+
+  .invoice-head {
+    gap: 8px;
+  }
+
+  .invoice-title {
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 9px;
+    align-items: center;
+  }
+
+  .index {
+    min-width: 38px;
+    height: 30px;
+    font-size: 13px;
+  }
+
+  .invoice-card h3 {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 14px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .status {
+    justify-self: start;
+    margin-left: 51px;
+    min-height: 28px;
+    padding: 0 10px;
+  }
+
+  .amount-block {
+    gap: 4px;
+    margin-top: 12px;
+    padding: 11px 12px;
+  }
+
+  .amount-block strong {
+    font-size: 24px;
+  }
+
+  .amount-block span,
+  .source-text,
+  .error-text,
+  .candidate-list span,
+  .candidate-list em {
+    font-size: 12px;
+  }
+
+  .invoice-uppercase span:first-child {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+
+  .card-actions {
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .card-actions button {
+    justify-self: stretch;
+  }
+
+  .candidate-list button {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 10px 11px;
+  }
+
+  .uppercase-popover {
+    position: fixed;
+    inset: auto 12px 16px;
+    width: auto;
+    max-width: none;
+    font-size: 22px !important;
+  }
+
+  .uppercase-copy-state {
+    right: auto;
+    left: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .topbar,
+  .workspace {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .brand-icon {
+    display: none;
+  }
+
+  .topbar {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .summary-card {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .summary-item strong {
+    font-size: 18px;
+  }
+
+  .amount-block strong {
+    font-size: 23px;
+  }
+
+  .pdf-frame {
+    height: clamp(220px, 34vh, 340px);
   }
 }

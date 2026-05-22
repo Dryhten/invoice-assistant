@@ -17,6 +17,9 @@ import { buildMergedInvoicePdf } from './pdf'
 import type { AmountCandidate, InvoiceItem, InvoiceStatsResponse } from './types'
 import { amountToCents, amountToChineseUppercase, centsToAmount, tryFormatAmount } from './utils/money'
 
+type PdfJsModule = typeof import('pdfjs-dist')
+type PdfDocumentProxy = Awaited<ReturnType<PdfJsModule['getDocument']>['promise']>
+
 interface TrackedUpload {
   loaded: number
   total: number
@@ -26,15 +29,25 @@ interface TrackedUpload {
 const MIN_UPLOAD_OVERLAY_MS = 1000
 const UPLOAD_OVERLAY_CLOSE_MS = 260
 const UPLOAD_RING_CIRCUMFERENCE = 339.292
+const FILE_INPUT_ID = 'invoice-file-input'
 
 const invoices = ref<InvoiceItem[]>([])
 const fileInput = ref<HTMLInputElement | null>(null)
 const dragActive = ref(false)
 const pdfUrl = ref<string | null>(null)
 const pdfBusy = ref(false)
+const pdfRendering = ref(false)
+const pdfPreviewReady = ref(false)
+const pdfCanvasContainer = ref<HTMLDivElement | null>(null)
+const isMobilePdfPreview = ref(false)
 const previewError = ref<string | null>(null)
 const extractQueueRunning = ref(false)
+let pdfRendererLoader: Promise<PdfJsModule> | null = null
+let activePdfDocument: PdfDocumentProxy | null = null
+let currentPdfBlob: Blob | null = null
+let mobilePreviewMediaQuery: MediaQueryList | null = null
 let pdfRefreshVersion = 0
+let pdfRenderVersion = 0
 let uploadSessionId = 0
 let uploadOverlayStartedAt = 0
 let uploadProgressTimer: number | null = null
@@ -315,6 +328,62 @@ function finishTrackedUpload(itemId: string) {
   refreshUploadProgress()
 }
 
+async function loadPdfRenderer() {
+  if (!pdfRendererLoader) {
+    pdfRendererLoader = Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.mjs?url')]).then(
+      ([pdfjs, worker]) => {
+        pdfjs.GlobalWorkerOptions.workerSrc = worker.default
+        return pdfjs
+      },
+    )
+  }
+  return pdfRendererLoader
+}
+
+function canRenderPdfPreview(): boolean {
+  return typeof window !== 'undefined' && 'Worker' in window && 'DOMMatrix' in window
+}
+
+function detectMobilePdfPreview(): boolean {
+  if (typeof window === 'undefined') {
+    return false
+  }
+  if (window.matchMedia) {
+    return window.matchMedia('(max-width: 768px), (pointer: coarse)').matches
+  }
+  return window.innerWidth <= 768
+}
+
+function clearMobilePdfCanvases() {
+  pdfCanvasContainer.value?.replaceChildren()
+}
+
+async function resetPdfViewerDocument() {
+  clearMobilePdfCanvases()
+  if (activePdfDocument) {
+    await activePdfDocument.destroy()
+    activePdfDocument = null
+  }
+}
+
+function refreshPreviewForCurrentDevice() {
+  isMobilePdfPreview.value = detectMobilePdfPreview()
+  pdfRenderVersion += 1
+  void resetPdfViewerDocument()
+  if (!currentPdfBlob) {
+    pdfPreviewReady.value = false
+    pdfRendering.value = false
+    return
+  }
+  if (isMobilePdfPreview.value) {
+    void renderMobilePdfPreview(currentPdfBlob, pdfRefreshVersion)
+  } else {
+    pdfPreviewReady.value = true
+    pdfRendering.value = false
+    previewError.value = null
+  }
+}
+
 function applyInvoiceStats(stats: InvoiceStatsResponse | null | undefined) {
   if (!stats || !Number.isInteger(stats.processedInvoices) || stats.processedInvoices < 0) {
     return
@@ -450,8 +519,12 @@ async function runExtractQueue() {
 
 async function refreshMergedPdf() {
   const version = ++pdfRefreshVersion
+  pdfRenderVersion += 1
   const files = invoices.value.map((item) => item.file)
   pdfBusy.value = true
+  pdfRendering.value = false
+  pdfPreviewReady.value = false
+  void resetPdfViewerDocument()
   previewError.value = null
   try {
     const blob = await buildMergedInvoicePdf(files)
@@ -462,8 +535,16 @@ async function refreshMergedPdf() {
       URL.revokeObjectURL(pdfUrl.value)
       pdfUrl.value = null
     }
+    currentPdfBlob = null
     if (blob) {
+      currentPdfBlob = blob
       pdfUrl.value = URL.createObjectURL(blob)
+      pdfBusy.value = false
+      if (isMobilePdfPreview.value) {
+        await renderMobilePdfPreview(blob, version)
+      } else {
+        pdfPreviewReady.value = true
+      }
     }
   } catch (error) {
     if (version === pdfRefreshVersion) {
@@ -476,6 +557,70 @@ async function refreshMergedPdf() {
   }
 }
 
+async function renderMobilePdfPreview(blob: Blob, refreshVersion: number) {
+  const renderVersion = ++pdfRenderVersion
+  pdfRendering.value = true
+  pdfPreviewReady.value = true
+  previewError.value = null
+  try {
+    if (!canRenderPdfPreview()) {
+      throw new Error('当前环境不支持内嵌 PDF 预览，请下载后查看。')
+    }
+    const pdfjs = await loadPdfRenderer()
+    if (refreshVersion !== pdfRefreshVersion || renderVersion !== pdfRenderVersion) {
+      return
+    }
+    await nextTick()
+    const container = pdfCanvasContainer.value
+    if (!container) {
+      throw new Error('PDF 预览容器未准备好')
+    }
+    await resetPdfViewerDocument()
+
+    const data = new Uint8Array(await blob.arrayBuffer())
+    activePdfDocument = await pdfjs.getDocument({ data }).promise
+    if (refreshVersion !== pdfRefreshVersion || renderVersion !== pdfRenderVersion) {
+      return
+    }
+    const maxCanvasWidth = Math.max(280, container.clientWidth - 20)
+    const outputScale = Math.min(window.devicePixelRatio || 1, 2)
+
+    for (let pageNumber = 1; pageNumber <= activePdfDocument.numPages; pageNumber += 1) {
+      if (refreshVersion !== pdfRefreshVersion || renderVersion !== pdfRenderVersion) {
+        return
+      }
+      const page = await activePdfDocument.getPage(pageNumber)
+      const baseViewport = page.getViewport({ scale: 1 })
+      const viewport = page.getViewport({ scale: maxCanvasWidth / baseViewport.width })
+      const canvas = document.createElement('canvas')
+      const context = canvas.getContext('2d')
+      if (!context) {
+        throw new Error('当前浏览器无法创建 PDF 预览画布')
+      }
+      canvas.width = Math.floor(viewport.width * outputScale)
+      canvas.height = Math.floor(viewport.height * outputScale)
+      canvas.style.width = `${Math.floor(viewport.width)}px`
+      canvas.style.height = `${Math.floor(viewport.height)}px`
+      context.setTransform(outputScale, 0, 0, outputScale, 0, 0)
+
+      const pageElement = document.createElement('div')
+      pageElement.className = 'pdf-canvas-page'
+      pageElement.append(canvas)
+      container.append(pageElement)
+      await page.render({ canvas, canvasContext: context, viewport }).promise
+    }
+  } catch (error) {
+    if (refreshVersion === pdfRefreshVersion && renderVersion === pdfRenderVersion) {
+      previewError.value = error instanceof Error ? error.message : 'PDF 预览渲染失败，请下载后查看。'
+      pdfPreviewReady.value = false
+    }
+  } finally {
+    if (refreshVersion === pdfRefreshVersion && renderVersion === pdfRenderVersion) {
+      pdfRendering.value = false
+    }
+  }
+}
+
 async function removeInvoice(item: InvoiceItem) {
   invoices.value = invoices.value.filter((invoice) => invoice.id !== item.id)
   await refreshMergedPdf()
@@ -483,10 +628,15 @@ async function removeInvoice(item: InvoiceItem) {
 
 function clearAll() {
   pdfRefreshVersion += 1
+  pdfRenderVersion += 1
   stopUploadOverlay()
   invoices.value = []
   previewError.value = null
   pdfBusy.value = false
+  pdfRendering.value = false
+  pdfPreviewReady.value = false
+  void resetPdfViewerDocument()
+  currentPdfBlob = null
   if (pdfUrl.value) {
     URL.revokeObjectURL(pdfUrl.value)
     pdfUrl.value = null
@@ -528,14 +678,25 @@ function onDrop(event: DragEvent) {
 }
 
 onBeforeUnmount(() => {
+  pdfRenderVersion += 1
   stopUploadOverlay()
   clearUppercaseCopyTimer()
+  void resetPdfViewerDocument()
+  if (mobilePreviewMediaQuery) {
+    mobilePreviewMediaQuery.removeEventListener('change', refreshPreviewForCurrentDevice)
+    mobilePreviewMediaQuery = null
+  }
   if (pdfUrl.value) {
     URL.revokeObjectURL(pdfUrl.value)
   }
 })
 
 onMounted(() => {
+  isMobilePdfPreview.value = detectMobilePdfPreview()
+  if (window.matchMedia) {
+    mobilePreviewMediaQuery = window.matchMedia('(max-width: 768px), (pointer: coarse)')
+    mobilePreviewMediaQuery.addEventListener('change', refreshPreviewForCurrentDevice)
+  }
   void loadInvoiceStats()
 })
 </script>
@@ -593,17 +754,32 @@ onMounted(() => {
       </section>
 
       <div class="actions">
-        <button class="primary-button" type="button" @click="openPicker">
+        <label
+          class="primary-button file-picker-button"
+          :for="FILE_INPUT_ID"
+          role="button"
+          tabindex="0"
+          @keydown.enter.prevent="openPicker"
+          @keydown.space.prevent="openPicker"
+        >
           <Upload :size="20" />
           {{ hasInvoices ? '继续添加' : '选择发票' }}
-        </button>
+        </label>
         <button class="ghost-button" type="button" :disabled="!hasInvoices" @click="clearAll">
           <Trash2 :size="19" />
           清空
         </button>
       </div>
 
-      <input ref="fileInput" type="file" multiple :accept="acceptedTypes" hidden @change="onInputChange" />
+      <input
+        :id="FILE_INPUT_ID"
+        ref="fileInput"
+        class="file-input"
+        type="file"
+        multiple
+        :accept="acceptedTypes"
+        @change="onInputChange"
+      />
     </header>
 
     <section
@@ -644,9 +820,17 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="pdf-frame">
-          <div v-if="pdfBusy" class="pdf-state">
+        <div class="pdf-frame" :class="{ rendering: pdfRendering }">
+          <div v-if="pdfBusy && !pdfPreviewReady" class="pdf-state pdf-loading">
             <Loader2 class="spin" :size="28" />
+            <span>正在生成合并预览</span>
+          </div>
+          <div v-else-if="pdfPreviewReady && isMobilePdfPreview" class="pdf-viewer-container" aria-label="合并发票预览">
+            <div ref="pdfCanvasContainer" class="pdf-canvas-viewer"></div>
+            <div v-if="pdfRendering" class="pdf-render-mask">
+              <Loader2 class="spin" :size="24" />
+              <span>正在渲染预览</span>
+            </div>
           </div>
           <iframe v-else-if="pdfUrl" :src="pdfUrl" title="合并发票预览" />
           <div v-else class="pdf-state">{{ previewError || '暂无可预览文件' }}</div>

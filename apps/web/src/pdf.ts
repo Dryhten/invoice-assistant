@@ -1,8 +1,48 @@
-import { PDFDocument, PageSizes } from 'pdf-lib'
+import { PDFDocument, PageSizes, type PageBoundingBox, type PDFPage } from 'pdf-lib'
 
 const A4 = PageSizes.A4
 const MARGIN = 28
 const GAP = 18
+const BOX_EPSILON = 0.01
+
+type PageBox = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+function isValidPageBox(box: PageBox) {
+  return (
+    [box.x, box.y, box.width, box.height].every((value) => Number.isFinite(value)) &&
+    box.width > BOX_EPSILON &&
+    box.height > BOX_EPSILON
+  )
+}
+
+function boxesAreEqual(a: PageBox, b: PageBox) {
+  return (
+    Math.abs(a.x - b.x) < BOX_EPSILON &&
+    Math.abs(a.y - b.y) < BOX_EPSILON &&
+    Math.abs(a.width - b.width) < BOX_EPSILON &&
+    Math.abs(a.height - b.height) < BOX_EPSILON
+  )
+}
+
+function getVisiblePdfPageBox(sourcePage: PDFPage): PageBoundingBox | undefined {
+  const mediaBox = sourcePage.getMediaBox()
+  const cropBox = sourcePage.getCropBox()
+  if (!isValidPageBox(cropBox) || boxesAreEqual(cropBox, mediaBox)) {
+    return undefined
+  }
+
+  return {
+    left: cropBox.x,
+    bottom: cropBox.y,
+    right: cropBox.x + cropBox.width,
+    top: cropBox.y + cropBox.height,
+  }
+}
 
 function getSlotPage(output: PDFDocument, slotIndex: number) {
   const pageIndex = Math.floor(slotIndex / 2)
@@ -15,7 +55,7 @@ async function addPdfFile(output: PDFDocument, file: File, startSlot: number): P
   const source = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: true })
   let slotIndex = startSlot
   for (const sourcePage of source.getPages()) {
-    const embeddedPage = await output.embedPage(sourcePage)
+    const embeddedPage = await output.embedPage(sourcePage, getVisiblePdfPageBox(sourcePage))
     const { targetPage, slot } = getSlotPage(output, slotIndex)
     const slotHeight = (A4[1] - MARGIN * 2 - GAP) / 2
     const maxWidth = A4[0] - MARGIN * 2

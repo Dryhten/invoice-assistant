@@ -43,6 +43,7 @@ npm run dev
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `WEB_PORT` | `5173` | 前端开发与预览服务端口 |
+| `DOCKER_WEB_PORT` | `18080` | Docker 运行时映射到宿主机的端口，不能与 `WEB_PORT` 相同 |
 
 ## 常用脚本
 
@@ -62,6 +63,25 @@ npm run build
 ```
 
 构建产物位于 `apps/web/dist`，可部署到任意静态站点服务、对象存储或 CDN。运行时不需要 Python、FastAPI 或 API 服务器。
+
+## Docker 离线运行
+
+项目包含可离线运行的 Docker 镜像配置。镜像运行时只包含 Nginx 与静态前端产物，不需要运行时联网安装依赖。
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-build.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-run.ps1
+```
+
+默认访问地址：`http://127.0.0.1:18080`
+
+停止服务：
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-stop.ps1
+```
+
+导出离线包与完整操作标准见 [docs/docker.md](docs/docker.md)。
 
 ### Vercel CD
 

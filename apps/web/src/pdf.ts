@@ -51,8 +51,24 @@ function getSlotPage(output: PDFDocument, slotIndex: number) {
   return { targetPage, slot }
 }
 
+function normalizeInvoicePdfHeader(bytes: Uint8Array): Uint8Array {
+  const header = String.fromCharCode(...bytes.subarray(0, 1024))
+  const attachedObject = /^%PDF-\d\.\d[^\r\n]*(?:\r\n?|\n)(?:%[^\r\n]*(?:\r\n?|\n))*?%%ULC:\d+(?:\.\d+)*[ \t]+(?=\d+[ \t]+\d+[ \t]+obj\b)/u.exec(header)
+  if (!attachedObject) {
+    return bytes
+  }
+
+  // Some invoice producers omit the newline after %%ULC, hiding the first
+  // object from pdf-lib's sequential parser. Replace only its separator in a
+  // copy: keep byte offsets, streams, and the original invoice file intact.
+  const normalized = bytes.slice()
+  normalized[attachedObject[0].length - 1] = 0x0a
+  return normalized
+}
+
 async function addPdfFile(output: PDFDocument, file: File, startSlot: number): Promise<number> {
-  const source = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: true })
+  const bytes = normalizeInvoicePdfHeader(new Uint8Array(await file.arrayBuffer()))
+  const source = await PDFDocument.load(bytes, { ignoreEncryption: true })
   let slotIndex = startSlot
   for (const sourcePage of source.getPages()) {
     const embeddedPage = await output.embedPage(sourcePage, getVisiblePdfPageBox(sourcePage))

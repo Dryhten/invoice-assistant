@@ -1,6 +1,6 @@
 import jsQR from 'jsqr'
 import type { ExtractAmountResponse, InvoiceStatsResponse } from './types'
-import { amountToChineseUppercase, centsToAmount } from './utils/money'
+import { amountToCents, amountToChineseUppercase, centsToAmount } from './utils/money'
 
 export interface LoadProgress {
   loaded: number
@@ -228,12 +228,29 @@ function parseInvoiceQrAmount(payload: string): { text: string; amount: string; 
   if (parts.length < 6) {
     return null
   }
-  const amountText = parts[4]
+  let amountText = parts[4]
+  const label = parts[0].toUpperCase()
+  if (label.startsWith('CZ-')) {
+    // Fiscal v1: label, version, bill code, bill number, check code, date, total.
+    // Never reinterpret a malformed fiscal QR's numeric check code as a VAT amount.
+    if (
+      parts.length !== 7 ||
+      !/^CZ-EI-\d{2}$/u.test(label) ||
+      !/^1\.\d+\.\d+$/u.test(parts[1]) ||
+      !/^\d+$/u.test(parts[2]) ||
+      !/^\d+$/u.test(parts[3]) ||
+      !/^[\da-z]{6}$/iu.test(parts[4]) ||
+      !/^\d{8}$/u.test(parts[5])
+    ) {
+      return null
+    }
+    amountText = parts[6]
+  }
   if (!/^\d+(?:\.\d{1,2})?$/u.test(amountText)) {
     return null
   }
-  const cents = Math.round(Number(amountText) * 100)
-  if (!Number.isFinite(cents) || cents <= 0) {
+  const cents = amountToCents(amountText)
+  if (!Number.isSafeInteger(cents) || cents <= 0) {
     return null
   }
   const amount = centsToAmount(cents)
@@ -245,7 +262,7 @@ function parseInvoiceQrAmount(payload: string): { text: string; amount: string; 
   }
 }
 
-function summarizeQrPayloads(payloads: string[]): Omit<ExtractAmountResponse, 'source' | 'elapsedMs' | 'stats'> | null {
+export function summarizeQrPayloads(payloads: string[]): Omit<ExtractAmountResponse, 'source' | 'elapsedMs' | 'stats'> | null {
   const candidatesByText = new Map<string, { text: string; amount: string; amount_uppercase: string; score: number }>()
   for (const payload of payloads) {
     const candidate = parseInvoiceQrAmount(payload)

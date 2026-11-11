@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { deflateSync } from 'node:zlib'
-import { decodePDFRawStream, PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFStream } from 'pdf-lib'
+import { decodePDFRawStream, PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFStream, PDFString } from 'pdf-lib'
 import { buildMergedInvoicePdf } from '../src/pdf'
 
 type PageBox = {
@@ -75,6 +75,34 @@ function createHeaderCommentPdfFile(commentSeparator: string, streamComment = ''
     type: 'application/pdf',
     arrayBuffer: async () => arrayBuffer,
   } as File
+}
+
+async function createSignedAppearancePdfFile(cropped: boolean) {
+  const source = await PDFDocument.create()
+  const page = source.addPage([595, 397])
+  page.drawText('SAMPLE INVOICE', { x: 40, y: 60 })
+  if (cropped) {
+    page.setCropBox(20, 40, 550, 330)
+  }
+  const fields = [
+    { x: 40, y: 80, width: 110, height: 83 },
+    { x: 300, y: 200, width: 86, height: 58 },
+  ].map(({ x, y, width, height }, index) => {
+    const appearance = source.context.flateStream(`% SAMPLE_STAMP_${index}\n1 0 0 rg\n0 0 ${width} ${height} re f\n`, {
+      Type: 'XObject', Subtype: 'Form', BBox: [0, 0, width, height], Resources: {},
+    })
+    const widget = source.context.obj({
+      Type: 'Annot', Subtype: 'Widget', FT: 'Sig', T: PDFString.of(`sample-signature-${index}`),
+      Rect: [x, y, x + width, y + height], P: page.ref, F: 4,
+      AP: { N: source.context.register(appearance) },
+    })
+    const ref = source.context.register(widget)
+    page.node.addAnnot(ref)
+    return ref
+  })
+  source.catalog.set(PDFName.of('AcroForm'), source.context.obj({ Fields: fields, SigFlags: 3 }))
+  const arrayBuffer = bytesToArrayBuffer(await source.save({ updateFieldAppearances: false }))
+  return { name: 'synthetic-signed-invoice.pdf', type: 'application/pdf', arrayBuffer: async () => arrayBuffer } as File
 }
 
 async function readFirstEmbeddedPageBox(file: File) {
@@ -152,5 +180,31 @@ describe('PDF merge helper', () => {
     const content = new TextDecoder().decode(decodePDFRawStream(embedded).decode())
     expect(content).toContain(streamComment)
     expect(content).toContain('(SAMPLE INVOICE) Tj')
+  })
+
+  it.each([false, true])('draws both signature appearances into the print copy (cropped=%s)', async (cropped) => {
+    const file = await createSignedAppearancePdfFile(cropped)
+    const original = new Uint8Array(await file.arrayBuffer()).slice()
+    const blob = await buildMergedInvoicePdf([file])
+    const merged = await PDFDocument.load(await blobToArrayBuffer(blob!))
+    const pageObjects = merged.getPage(0).node.Resources()!.lookup(PDFName.of('XObject'), PDFDict)
+    const invoice = pageObjects.lookup(pageObjects.keys()[0]) as PDFRawStream
+    const content = new TextDecoder().decode(decodePDFRawStream(invoice).decode())
+    const stampObjects = invoice.dict.lookup(PDFName.of('Resources'), PDFDict).lookupMaybe(PDFName.of('XObject'), PDFDict)
+    expect(stampObjects?.keys().length).toBe(2)
+    const stamps = stampObjects!.entries().map(([name, ref]) => {
+      expect(content).toContain(`${name.toString()} Do`)
+      const appearance = merged.context.lookup(ref) as PDFRawStream
+      return new TextDecoder().decode(decodePDFRawStream(appearance).decode())
+    })
+    expect(stamps[0]).toContain('SAMPLE_STAMP_0')
+    expect(stamps[1]).toContain('SAMPLE_STAMP_1')
+    expect(content).toContain('1 0 0 1 40 80 cm')
+    expect(content).toContain('1 0 0 1 300 200 cm')
+    expect(merged.getPage(0).node.Annots()?.size() ?? 0).toBe(0)
+    expect(merged.getForm().getFields()).toHaveLength(0)
+    expect(new Uint8Array(await file.arrayBuffer())).toEqual(original)
+    const unchangedSource = await PDFDocument.load(await file.arrayBuffer())
+    expect(unchangedSource.getForm().getFields()).toHaveLength(2)
   })
 })

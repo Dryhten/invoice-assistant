@@ -1,4 +1,4 @@
-import { PDFDocument, PageSizes, type PageBoundingBox, type PDFPage } from 'pdf-lib'
+import { PDFDocument, PDFName, PageSizes, type PageBoundingBox, type PDFPage } from 'pdf-lib'
 
 const A4 = PageSizes.A4
 const MARGIN = 28
@@ -69,6 +69,11 @@ function normalizeInvoicePdfHeader(bytes: Uint8Array): Uint8Array {
 async function addPdfFile(output: PDFDocument, file: File, startSlot: number): Promise<number> {
   const bytes = normalizeInvoicePdfHeader(new Uint8Array(await file.arrayBuffer()))
   const source = await PDFDocument.load(bytes, { ignoreEncryption: true })
+  if (source.catalog.has(PDFName.of('AcroForm'))) {
+    // embedPage copies content streams, not widgets. Paint their existing
+    // appearances into this in-memory print copy, preserving signature seals.
+    source.getForm().flatten({ updateFieldAppearances: false })
+  }
   let slotIndex = startSlot
   for (const sourcePage of source.getPages()) {
     const embeddedPage = await output.embedPage(sourcePage, getVisiblePdfPageBox(sourcePage))
